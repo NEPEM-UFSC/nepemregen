@@ -10,29 +10,30 @@ adc_cali_handle_t HalAdc::cali_handle = nullptr;
 
 void HalAdc::init() {
   // 1. Initialize ADC Unit
-  adc_oneshot_unit_init_config_t init_config1 = {
+  adc_oneshot_unit_init_cfg_t init_config1 = {
       .unit_id = ADC_UNIT_1,
-      .clk_src = ADC_DIGI_CLK_SRC_DEFAULT,
-      .ulp_mode = ADC_ONESHOT_ulp_mode_DISABLE,
+      .clk_src = ADC_RTC_CLK_SRC_DEFAULT,
+      .ulp_mode = ADC_ULP_MODE_DISABLE,
   };
   ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config1, &adc1_handle));
 
   // 2. Configure Channels
-  adc_oneshot_chan_config_t config = {
+  adc_oneshot_chan_cfg_t config = {
       .atten = ADC_ATTEN_DB_12, // ESP-IDF v6 equivalent of DB_11 is usually 12
                                 // for some targets, or just use 12
       .bitwidth = ADC_BITWIDTH_DEFAULT,
   };
-  ESP_ERROR_CHECK(
-      adc_oneshot_config_channel(adc1_handle, ADC_CH_CAP_1, &config));
-  ESP_ERROR_CHECK(
-      adc_oneshot_config_channel(adc1_handle, ADC_CH_CAP_2, &config));
+  ESP_ERROR_CHECK(adc_oneshot_config_channel(
+      adc1_handle, (adc_channel_t)ADC_CH_CAP_1, &config));
+  ESP_ERROR_CHECK(adc_oneshot_config_channel(
+      adc1_handle, (adc_channel_t)ADC_CH_CAP_2, &config));
 
   // 3. Calibration
   adc_cali_line_fitting_config_t cali_config = {
       .unit_id = ADC_UNIT_1,
       .atten = ADC_ATTEN_DB_12,
       .bitwidth = ADC_BITWIDTH_DEFAULT,
+      .default_vref = 0,
   };
   // Note: If line fitting fails, we could try curve fitting or skip calibration
   esp_err_t ret =

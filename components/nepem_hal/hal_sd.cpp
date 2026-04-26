@@ -18,7 +18,9 @@ bool HalSd::init() {
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
         .format_if_mount_failed = false,
         .max_files = 5,
-        .allocation_unit_size = 16 * 1024
+        .allocation_unit_size = 16 * 1024,
+        .disk_status_check_enable = false,
+        .use_one_fat = false
     };
     sdmmc_card_t* card;
     const char mount_point[] = "/sdcard";
