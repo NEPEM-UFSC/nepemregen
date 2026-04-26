@@ -20,6 +20,11 @@ public:
   static bool is_fan_on();
   static bool is_ac_power_present();
 
+#ifdef SIMULATOR
+  static bool was_pump_ever_on;
+  static void reset_history();
+#endif
+
 private:
   static bool pump_state;
   static bool fan_state;

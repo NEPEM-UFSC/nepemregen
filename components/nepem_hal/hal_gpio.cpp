@@ -2,6 +2,10 @@
 
 bool HalGpio::pump_state = false;
 bool HalGpio::fan_state = false;
+#ifdef SIMULATOR
+bool HalGpio::was_pump_ever_on = false;
+void HalGpio::reset_history() { was_pump_ever_on = false; }
+#endif
 
 void HalGpio::init() {
 #ifndef SIMULATOR
@@ -28,6 +32,9 @@ void HalGpio::init() {
 
 void HalGpio::set_pump(bool state) {
   pump_state = state;
+#ifdef SIMULATOR
+  if (state) was_pump_ever_on = true;
+#endif
 #ifndef SIMULATOR
   gpio_set_level(PIN_RELE_BOMBA, state ? 1 : 0);
 #endif

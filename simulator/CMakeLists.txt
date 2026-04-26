@@ -6,16 +6,19 @@ set(CMAKE_CXX_STANDARD 17)
 # Define SIMULATOR macro
 add_definitions(-DSIMULATOR=1)
 
+# ESP-IDF Unity path
+set(UNITY_PATH "C:/esp/v6.0/esp-idf/components/unity/unity/src")
+
 # Include paths
 include_directories(
     ../components/nepem_hal/include
     ../components/app_core/include
     ../components/utils/include
+    ${UNITY_PATH}
 )
 
 # Source files
 set(SOURCES
-    main_sim.cpp
     ../components/nepem_hal/hal_gpio.cpp
     ../components/nepem_hal/hal_adc.cpp
     ../components/nepem_hal/hal_i2c.cpp
@@ -27,6 +30,14 @@ set(SOURCES
     ../components/utils/edge_analytics.cpp
 )
 
-# Mocks for edge_analytics and telemetry if needed, or include them if they are clean
-# Let's check them first.
-add_executable(nepem_sim ${SOURCES})
+# Main simulator executable
+add_executable(nepem_sim main_sim.cpp ${SOURCES})
+
+# Unit tests executable
+add_executable(nepem_tests 
+    run_tests.cpp 
+    ../test/main/test_analytics.cpp 
+    ../test/main/test_irrigation.cpp
+    ${SOURCES}
+    ${UNITY_PATH}/unity.c
+)
