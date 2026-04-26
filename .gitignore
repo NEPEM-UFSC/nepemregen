@@ -237,3 +237,4 @@ pyrightconfig.json
 # End of https://www.toptal.com/developers/gitignore/api/c++,cmake,python
 build_alt/log/*
 */log/*
+build_alt/*
