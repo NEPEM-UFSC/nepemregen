@@ -1,22 +1,46 @@
 #include "hal_adc.h"
 #include "esp_log.h"
+#include "esp_adc/adc_cali_scheme.h"
 #include <math.h>
 
 static const char* TAG = "HAL_ADC";
 
-esp_adc_cal_characteristics_t* HalAdc::adc_chars = nullptr;
+adc_oneshot_unit_handle_t HalAdc::adc1_handle = nullptr;
+adc_cali_handle_t HalAdc::cali_handle = nullptr;
 
 void HalAdc::init() {
-    adc1_config_width(ADC_WIDTH_BIT_12);
-    adc1_config_channel_atten(ADC_CH_CAP_1, ADC_ATTEN_DB_11);
-    adc1_config_channel_atten(ADC_CH_CAP_2, ADC_ATTEN_DB_11);
+    // 1. Initialize ADC Unit
+    adc_oneshot_unit_init_config_t init_config1 = {
+        .unit_id = ADC_UNIT_1,
+        .clk_src = ADC_DIGI_CLK_SRC_DEFAULT,
+        .ulp_mode = ADC_ONESHOT_ulp_mode_DISABLE,
+    };
+    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config1, &adc1_handle));
 
-    adc_chars = (esp_adc_cal_characteristics_t*) calloc(1, sizeof(esp_adc_cal_characteristics_t));
-    esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 1100, adc_chars);
+    // 2. Configure Channels
+    adc_oneshot_chan_config_t config = {
+        .atten = ADC_ATTEN_DB_12, // ESP-IDF v6 equivalent of DB_11 is usually 12 for some targets, or just use 12
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+    };
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, ADC_CH_CAP_1, &config));
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, ADC_CH_CAP_2, &config));
+
+    // 3. Calibration
+    adc_cali_line_fitting_config_t cali_config = {
+        .unit_id = ADC_UNIT_1,
+        .atten = ADC_ATTEN_DB_12,
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+    };
+    // Note: If line fitting fails, we could try curve fitting or skip calibration
+    esp_err_t ret = adc_cali_create_scheme_line_fitting(&cali_config, &cali_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Calibration failed, proceeding without it.");
+        cali_handle = nullptr;
+    }
 }
 
-// Mapeamento: 1200 (na água) -> 100%, 4095 (no ar) -> 0%
 float HalAdc::raw_to_percentage(int raw) {
+    // Mapeamento: 1200 (na água) -> 100%, 4095 (no ar) -> 0%
     float percent = 100.0f - ((raw - 1200.0f) / (4095.0f - 1200.0f)) * 100.0f;
     if (percent < 0.0f) percent = 0.0f;
     if (percent > 100.0f) percent = 100.0f;
@@ -28,8 +52,11 @@ float HalAdc::read_soil_moisture() {
     
     // Multisample para estabilidade
     for(int i=0; i<10; i++) {
-        raw1 += adc1_get_raw(ADC_CH_CAP_1);
-        raw2 += adc1_get_raw(ADC_CH_CAP_2);
+        int temp_raw;
+        adc_oneshot_read(adc1_handle, ADC_CH_CAP_1, &temp_raw);
+        raw1 += temp_raw;
+        adc_oneshot_read(adc1_handle, ADC_CH_CAP_2, &temp_raw);
+        raw2 += temp_raw;
     }
     raw1 /= 10;
     raw2 /= 10;
@@ -44,8 +71,6 @@ float HalAdc::read_soil_moisture() {
         float diff = fabs(p1 - p2);
         if (diff > 15.0f) {
             ESP_LOGE(TAG, "Falha de Hardware: Diferenca entre sensores > 15%% (%.1f vs %.1f)", p1, p2);
-            // Poderíamos retornar -1, mas o readme pede log de erro.
-            // Para não quebrar a lógica hídrica, podemos usar a média e o log avisa a telemetria.
         }
         return (p1 + p2) / 2.0f;
     } else if (valid1) {
