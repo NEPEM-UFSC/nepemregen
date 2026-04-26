@@ -1,0 +1,43 @@
+#include "hal_gpio.h"
+
+bool HalGpio::pump_state = false;
+bool HalGpio::fan_state = false;
+
+void HalGpio::init() {
+  gpio_config_t io_conf = {};
+  io_conf.intr_type = GPIO_INTR_DISABLE;
+  io_conf.mode = GPIO_MODE_OUTPUT;
+  io_conf.pin_bit_mask = (1ULL << PIN_RELE_BOMBA) | (1ULL << PIN_RELE_VENT);
+  io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+  io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+  gpio_config(&io_conf);
+
+  gpio_config_t in_conf = {};
+  in_conf.intr_type = GPIO_INTR_DISABLE;
+  in_conf.mode = GPIO_MODE_INPUT;
+  in_conf.pin_bit_mask = (1ULL << PIN_POWER_DETECT);
+  in_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+  in_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+  gpio_config(&in_conf);
+
+  set_pump(false);
+  set_fan(false);
+}
+
+void HalGpio::set_pump(bool state) {
+  pump_state = state;
+  gpio_set_level(PIN_RELE_BOMBA, state ? 1 : 0);
+}
+
+void HalGpio::set_fan(bool state) {
+  fan_state = state;
+  gpio_set_level(PIN_RELE_VENT, state ? 1 : 0);
+}
+
+bool HalGpio::is_pump_on() { return pump_state; }
+
+bool HalGpio::is_fan_on() { return fan_state; }
+
+bool HalGpio::is_ac_power_present() {
+  return gpio_get_level(PIN_POWER_DETECT) == 1;
+}
