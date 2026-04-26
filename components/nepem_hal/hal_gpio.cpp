@@ -33,7 +33,8 @@ void HalGpio::init() {
 void HalGpio::set_pump(bool state) {
   pump_state = state;
 #ifdef SIMULATOR
-  if (state) was_pump_ever_on = true;
+  if (state)
+    was_pump_ever_on = true;
 #endif
 #ifndef SIMULATOR
   gpio_set_level(PIN_RELE_BOMBA, state ? 1 : 0);

@@ -1,30 +1,30 @@
-#include "unity.h"
-#include "irrigation_ctrl.h"
 #include "hal_gpio.h"
+#include "irrigation_ctrl.h"
 #include "time_utils.h"
+#include "unity.h"
 
 void test_irrigation_logic_critical(void) {
-    // Setup
-    IrrigationCtrl::init();
-    HalGpio::init();
-    HalGpio::reset_history();
-    
-    // Initial state
-    TEST_ASSERT_FALSE(HalGpio::is_pump_on());
-    TEST_ASSERT_FALSE(HalGpio::was_pump_ever_on);
-    
-    // Process with safe moisture (60% > 50%)
-    IrrigationCtrl::process(60.0f, 25.0f, 60.0f);
-    TEST_ASSERT_FALSE(HalGpio::is_pump_on());
-    TEST_ASSERT_FALSE(HalGpio::was_pump_ever_on);
-    
-    // Process with critical moisture (40% < 50%)
-    IrrigationCtrl::process(40.0f, 25.0f, 60.0f);
-    
-    // In simulation, vTaskDelay is noop, so pump turns ON and then OFF immediately.
-    // We check if it WAS on.
-    TEST_ASSERT_TRUE(HalGpio::was_pump_ever_on);
-    TEST_ASSERT_FALSE(HalGpio::is_pump_on()); // Should be OFF now
+  // Setup
+  IrrigationCtrl::init();
+  HalGpio::init();
+  HalGpio::reset_history();
+
+  // Initial state
+  TEST_ASSERT_FALSE(HalGpio::is_pump_on());
+  TEST_ASSERT_FALSE(HalGpio::was_pump_ever_on);
+
+  // Process with safe moisture (60% > 50%)
+  IrrigationCtrl::process(60.0f, 25.0f, 60.0f);
+  TEST_ASSERT_FALSE(HalGpio::is_pump_on());
+  TEST_ASSERT_FALSE(HalGpio::was_pump_ever_on);
+
+  // Process with critical moisture (40% < 50%)
+  IrrigationCtrl::process(40.0f, 25.0f, 60.0f);
+
+  // In simulation, vTaskDelay is noop, so pump turns ON and then OFF
+  // immediately. We check if it WAS on.
+  TEST_ASSERT_TRUE(HalGpio::was_pump_ever_on);
+  TEST_ASSERT_FALSE(HalGpio::is_pump_on()); // Should be OFF now
 }
 
 // Simple history record for mocks

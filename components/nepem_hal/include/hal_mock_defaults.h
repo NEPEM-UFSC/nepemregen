@@ -32,6 +32,13 @@
 
 typedef int esp_err_t;
 typedef int adc_channel_t;
+typedef uint32_t nvs_handle_t;
+
+#define NVS_READONLY 0
+#define NVS_READWRITE 1
+#define ESP_ERR_NVS_NOT_FOUND 0x101
+#define ESP_ERR_NVS_NO_FREE_PAGES 0x102
+#define ESP_ERR_NVS_NEW_VERSION_FOUND 0x103
 
 #ifndef pdMS_TO_TICKS
 #define pdMS_TO_TICKS(x) (x)

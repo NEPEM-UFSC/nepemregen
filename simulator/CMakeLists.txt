@@ -14,11 +14,13 @@ include_directories(
     ../components/nepem_hal/include
     ../components/app_core/include
     ../components/utils/include
+    ./include
     ${UNITY_PATH}
 )
 
 # Source files
 set(SOURCES
+    nvs_mock.cpp
     ../components/nepem_hal/hal_gpio.cpp
     ../components/nepem_hal/hal_adc.cpp
     ../components/nepem_hal/hal_i2c.cpp
@@ -38,6 +40,7 @@ add_executable(nepem_tests
     run_tests.cpp 
     ../test/main/test_analytics.cpp 
     ../test/main/test_irrigation.cpp
+    ../test/main/test_integration.cpp
     ${SOURCES}
     ${UNITY_PATH}/unity.c
 )
