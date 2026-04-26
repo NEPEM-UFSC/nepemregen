@@ -1,6 +1,10 @@
 #pragma once
 
+#ifndef SIMULATOR
 #include "driver/gpio.h"
+#else
+typedef int gpio_num_t;
+#endif
 
 // Definições de Pinos
 #define PIN_RELE_BOMBA (gpio_num_t)26

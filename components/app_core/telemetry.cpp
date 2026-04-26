@@ -1,6 +1,9 @@
 #include "telemetry.h"
 #include "edge_analytics.hpp"
+#include "hal_mock_defaults.h"
+#ifndef SIMULATOR
 #include "esp_log.h"
+#endif
 #include "hal_sd.h"
 #include "time_utils.h"
 #include <stdio.h>

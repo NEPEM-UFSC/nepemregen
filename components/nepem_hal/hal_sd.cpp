@@ -1,7 +1,10 @@
 #include "hal_sd.h"
+#include "hal_mock_defaults.h"
+#ifndef SIMULATOR
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
 #include "driver/sdspi_host.h"
+#endif
 #include <string.h>
 
 static const char* TAG = "HAL_SD";
@@ -14,6 +17,7 @@ static const char* TAG = "HAL_SD";
 bool HalSd::available = false;
 
 bool HalSd::init() {
+#ifndef SIMULATOR
     esp_err_t ret;
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
         .format_if_mount_failed = false,
@@ -52,6 +56,9 @@ bool HalSd::init() {
     }
     
     ESP_LOGI(TAG, "SD Card mounted");
+#else
+    ESP_LOGI(TAG, "Simulated SD initialized (local file)");
+#endif
     available = true;
     return true;
 }
@@ -63,7 +70,13 @@ bool HalSd::is_available() {
 bool HalSd::append_file(const char* path, const char* data) {
     if (!available) return false;
     
-    FILE* f = fopen(path, "a");
+#ifdef SIMULATOR
+    const char* actual_path = "sim_log.csv";
+#else
+    const char* actual_path = path;
+#endif
+
+    FILE* f = fopen(actual_path, "a");
     if (f == NULL) {
         ESP_LOGE(TAG, "Failed to open file for appending");
         return false;

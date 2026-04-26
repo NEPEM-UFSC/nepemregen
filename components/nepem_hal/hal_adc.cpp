@@ -1,7 +1,11 @@
 #include "hal_adc.h"
+#include "hal_mock_defaults.h"
+#ifndef SIMULATOR
 #include "esp_adc/adc_cali_scheme.h"
 #include "esp_log.h"
+#endif
 #include <math.h>
+#include <stdlib.h>
 
 static const char *TAG = "HAL_ADC";
 
@@ -9,6 +13,7 @@ adc_oneshot_unit_handle_t HalAdc::adc1_handle = nullptr;
 adc_cali_handle_t HalAdc::cali_handle = nullptr;
 
 void HalAdc::init() {
+#ifndef SIMULATOR
   // 1. Initialize ADC Unit
   adc_oneshot_unit_init_cfg_t init_config1 = {
       .unit_id = ADC_UNIT_1,
@@ -42,6 +47,7 @@ void HalAdc::init() {
     ESP_LOGW(TAG, "Calibration failed, proceeding without it.");
     cali_handle = nullptr;
   }
+#endif
 }
 
 float HalAdc::raw_to_percentage(int raw) {
@@ -55,14 +61,24 @@ float HalAdc::raw_to_percentage(int raw) {
 }
 
 float HalAdc::read_soil_moisture() {
+#ifdef SIMULATOR
+  // Simula um valor entre 30% e 70% com uma pequena variação
+  static float last_val = 50.0f;
+  last_val += (rand() % 21 - 10) / 10.0f; // -1.0 a +1.0
+  if (last_val < 0) last_val = 0;
+  if (last_val > 100) last_val = 100;
+  return last_val;
+#endif
+
+#ifndef SIMULATOR
   int raw1 = 0, raw2 = 0;
 
   // Multisample para estabilidade
   for (int i = 0; i < 10; i++) {
     int temp_raw;
-    adc_oneshot_read(adc1_handle, ADC_CH_CAP_1, &temp_raw);
+    adc_oneshot_read(adc1_handle, (adc_channel_t)ADC_CH_CAP_1, &temp_raw);
     raw1 += temp_raw;
-    adc_oneshot_read(adc1_handle, ADC_CH_CAP_2, &temp_raw);
+    adc_oneshot_read(adc1_handle, (adc_channel_t)ADC_CH_CAP_2, &temp_raw);
     raw2 += temp_raw;
   }
   raw1 /= 10;
@@ -93,4 +109,7 @@ float HalAdc::read_soil_moisture() {
 
   ESP_LOGE(TAG, "Ambos sensores falharam");
   return -1.0f;
+#else
+  return 0.0f; // Should not reach here due to earlier return
+#endif
 }

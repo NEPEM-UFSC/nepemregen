@@ -1,6 +1,9 @@
 #include "irrigation_ctrl.h"
+#include "hal_mock_defaults.h"
+#ifndef SIMULATOR
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#endif
 #include "hal_gpio.h"
 #include "telemetry.h"
 #include "time_utils.h"

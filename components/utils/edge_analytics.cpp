@@ -1,7 +1,10 @@
 #include "edge_analytics.hpp"
 #include <algorithm>
 #include <cmath>
+#include "hal_mock_defaults.h"
+#ifndef SIMULATOR
 #include <esp_attr.h>
+#endif
 
 namespace edge_analytics {
 

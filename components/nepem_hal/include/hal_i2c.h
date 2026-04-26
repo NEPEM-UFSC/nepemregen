@@ -1,6 +1,11 @@
 #pragma once
+#include "hal_mock_defaults.h"
 
+#ifndef SIMULATOR
 #include "driver/i2c.h"
+#else
+#define I2C_NUM_0 0
+#endif
 
 #define I2C_MASTER_SCL_IO           22
 #define I2C_MASTER_SDA_IO           21

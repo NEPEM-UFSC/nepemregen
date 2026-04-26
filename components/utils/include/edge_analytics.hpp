@@ -1,6 +1,9 @@
 #pragma once
 
+#include "hal_mock_defaults.h"
+#ifndef SIMULATOR
 #include "esp_attr.h"
+#endif
 #include <math.h>
 
 namespace edge_analytics {

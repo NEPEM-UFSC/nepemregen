@@ -1,6 +1,9 @@
 #pragma once
 
+#include "hal_mock_defaults.h"
+#ifndef SIMULATOR
 #include "esp_err.h"
+#endif
 
 class HalSd {
 public:

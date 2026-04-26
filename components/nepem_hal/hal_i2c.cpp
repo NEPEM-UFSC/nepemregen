@@ -1,11 +1,17 @@
 #include "hal_i2c.h"
+#include "hal_mock_defaults.h"
+#ifndef SIMULATOR
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#endif
+#include <stdlib.h>
+#include <cstdint>
 
 static const char* TAG = "HAL_I2C";
 
 esp_err_t HalI2c::i2c_master_init() {
+#ifndef SIMULATOR
     i2c_port_t i2c_master_port = I2C_MASTER_NUM;
     i2c_config_t conf = {};
     conf.mode = I2C_MODE_MASTER;
@@ -20,6 +26,9 @@ esp_err_t HalI2c::i2c_master_init() {
     if (err != ESP_OK) return err;
     
     return i2c_driver_install(i2c_master_port, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
+#else
+    return ESP_OK;
+#endif
 }
 
 void HalI2c::init() {
@@ -32,6 +41,16 @@ void HalI2c::init() {
 }
 
 bool HalI2c::read_sht31(float &temp, float &hum) {
+#ifdef SIMULATOR
+    // Simula temperatura entre 20 e 30 graus, umidade entre 40 e 80%
+    static float last_t = 25.0f;
+    static float last_h = 60.0f;
+    last_t += (rand() % 11 - 5) / 10.0f;
+    last_h += (rand() % 11 - 5) / 10.0f;
+    temp = last_t;
+    hum = last_h;
+    return true;
+#else
     uint8_t cmd[2] = {0x24, 0x00}; // Clock stretching disabled, high repeatability
     
     i2c_cmd_handle_t cmd_handle = i2c_cmd_link_create();
@@ -67,4 +86,5 @@ bool HalI2c::read_sht31(float &temp, float &hum) {
     hum = 100.0f * ((float)srh / 65535.0f);
 
     return true;
+#endif
 }
