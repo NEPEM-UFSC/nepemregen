@@ -1,115 +1,87 @@
-# Edge Appliance - ESP32 C++ Project
+# NEPEM REGEN
 
-Estrutura base para desenvolvimento de dispositivos de borda utilizando ESP32, C++ e o framework ESP-IDF.
+## Sistema de Controle Ambiental de Precisão para Mini-estufas.
+## Desenvolvido pelo o Núcleo de Estudos e Pesquisa em Experimentação e Melhoramento Vegetal (NEPEM/UFSC)
 
-## Estrutura de Pastas
+O REGEN é um sistema embarcado de malha fechada projetado para a automação e monitoramento de estufas de pesquisa (_Nursery_), especificamente calibrado para o cultivo de Linhaça (_Linum usitatissimum_). O foco do projeto é a manutenção do Déficit de Pressão de Vapor (VPD) e a estabilidade da tensão matricial do solo, garantindo a repetibilidade experimental necessária para programas de melhoramento.
 
-- `main/`: Ponto de entrada da aplicação.
-- `components/`: Módulos reutilizáveis e lógica de negócio.
-  - `app_core/`: Lógica central do appliance.
-  - `hal/`: Camada de Abstração de Hardware.
-  - `utils/`: Utilitários genéricos.
-- `test/`: Projeto paralelo para execução de testes unitários.
+## O Problema Científico
 
-## Como Buildar
+Experimentos com linhaça em ambiente controlado sofrem com a alta sensibilidade à umidade relativa e ao estresse hídrico. A ventilação inadequada gera condensação foliar (risco de Botrytis), enquanto a irrigação baseada apenas em timers ignora a inércia hídrica do substrato, levando ao overshooting hídrico. O REGEN resolve isso através de Edge Analytics e Interlocks de Segurança.
 
-### Aplicação Principal
-```bash
-idf.py build
-```
+## Arquitetura do Sistema
+Hardware (Bill of Materials)
 
-### Testes
-```bash
-cd test
-idf.py build
-```
+    MCU: ESP32-WROOM-32 (Target esp32).
 
-## Requisitos
-- ESP-IDF v4.4 ou superior.
-- Toolchain C++ configurada.
+    Sensor Termodinâmico: SHT31-D (I2C) com filtro sinterizado.
 
-Documentação Técnica: Sistema Automático de Regulação Ambiental (REGEN)
-1. Objetivo Científico
+    Sensores Hídricos: 2x Sensores Capacitivos de Umidade do Solo (Resistentes à corrosão).
 
-Desenvolver um sistema embarcado (ESP32) para regulação autônoma de umidade matricial e déficit de pressão de vapor em um microambiente controlado (mini-estufa). O sistema utiliza fusão de dados sensoriais para evitar falhas catastróficas e aplica leis de histerese para compensar o atraso (lag time) de infiltração da água no substrato.
-2. Fusão de Sensores e Tratamento de Dados
+    Gestão de Energia: Módulo UPS 18650 com Gerenciamento de Caminho de Energia.
 
-O sistema não confia em leituras brutas isoladas. A arquitetura exige tolerância a falhas de hardware:
+    Atuação: Shield de Relés de 2 Canais com isolamento por optoacopladores.
 
-    Matriz Hídrica (Capacitivos TDR/FDR): Utiliza-se um mínimo de dois sensores no mesmo tratamento. A ESP32 lê ambos. Se a diferença entre eles for maior que uma variância aceitável (ex: >15%), o sistema sinaliza erro de hardware no log. Se a leitura for coerente, aplica-se a média aritmética. Leituras fora do escopo físico (<0% ou >100%) são sumariamente descartadas (Filtro de Outliers).
+    I/O Peripheral: Shield de expansão de IO para facilitar conexões e reduzir ruído.
 
-    Termodinâmica (SHT31-D): Comunicação I2C garantindo integridade digital da leitura de Temperatura e Umidade Relativa do Ar (UR).
+Software Stack
 
-3. Lógica de Controle de Atuadores
-3.1. Controle Hídrico (Irrigação de Precisão)
+    Firmware: C++ Nativo sobre ESP-IDF (FreeRTOS).
 
-A irrigação não é contínua; ela é quantizada e bloqueada por tempo.
+    Analytics: Cálculo local de VPD e Ponto de Orvalho.
 
-    Condição de Disparo: Umidade do solo cai abaixo do Setpoint Crítico (ex: 50%).
+    Logging: CSV estruturado via UART/Serial (integrável com Python Host).
 
-    Ação: A bomba é acionada por um tempo tp​ (Tempo de Pulso), calculado para entregar um volume exato Vp​, dada a vazão conhecida Q do sistema:
-    Vp​=Q⋅tp​
+    Resiliência: Detecção de Brownout e persistência em memória NVS.
 
-    Interlock (Cooldown): Imediatamente após o pulso, a rotina de irrigação é bloqueada por um período tlag​ (Atraso de Infiltração). Mesmo que o sensor continue registrando 49%, a bomba não ligará até que tlag​ expire, garantindo que a água percolou até a zona de leitura do sensor, evitando encharcamento.
+🧬 Lógica de Controle (The "Regen" Core)
+1. Irrigação com Calibração de Lag-Time
 
-3.2. Controle Termodinâmico (Ventilação Cumulativa)
+O sistema utiliza um algoritmo de Pulso & Espera. Ao detectar solo abaixo de 50%, dispara um volume fixo (calibrado em mL) e entra em estado de Lockdown por X minutos, permitindo que o sensor detecte a água percolada antes de nova atuação.
+2. Ventilação Estratégica (VPD-Driven)
 
-A estufa exige renovação gasosa para manter a Evapotranspiração (EvP) e evitar condensação foliar. A lógica opera em duas frentes não-excludentes:
+A ventilação não é apenas horária; ela é inteligente:
 
-    Regra de Manutenção (Agendamento Cumulativo): O sistema exige 5 minutos de ventilação a cada janela de 30 minutos, operando apenas entre 06:00 e 18:00. O cronômetro acumula o tempo em que o ventilador esteve ligado por qualquer motivo. Se, ao final da janela de 30 minutos, o tempo acumulado for menor que 5 minutos, o sistema força a ligação pelo tempo faltante.
+    Quota de Renovação: Garante 5 min de fluxo a cada 30 min (janela das 06h às 18h).
 
-    Regra de Emergência Térmica/Fúngica:
-    Se a temperatura ultrapassar o limite crítico (T>Tmax​) E a umidade do ar estiver alta (UR>URmax​), o ventilador liga imediatamente, independentemente do horário ou da regra de manutenção.
-    Comportamento do Cronômetro: Todo segundo em que o ventilador opera na emergência é abatido da cota da Regra de Manutenção.
+    Gatilho de VPD: Aciona emergencialmente se o VPD cair abaixo de 0.4 kPa (evitando fungos) ou se o Ponto de Orvalho se aproximar da temperatura foliar.
 
-4. Arquitetura do Protocolo de Telemetria (LOGS)
+3. Telemetria de Falhas
 
-O sistema de armazenamento de dados (via SD Card ou requisição HTTP para nuvem) deve seguir uma estrutura retangular tabular rigorosa. A geração do log ocorre sob duas condições:
+    Monitoramento ativo da rede elétrica da UFSC via divisor de tensão.
 
-    Base (Time-Driven): A cada 30 minutos exatos (via interrupção de timer ou NTP).
+    Registro de BROWNOUT_RESET para invalidar dados climáticos durante instabilidades elétricas.
 
-    Evento (Event-Driven): No exato momento de qualquer mudança de estado nos relés (Bomba LIGOU, Bomba DESLIGOU, Vent LIGOU, Vent DESLIGOU, Falha de Sensor).
+🚀 Como Executar (Ambiente de Pesquisa)
+Requisitos
 
-Estrutura do Arquivo .csv
-Timestamp (Epoch)	Trigger_Origem	Evento_Atuador	Temp_Ar (°C)	Umid_Ar (%)	Umid_Solo_Media (%)	Lag_Ativo (bool)
-1714140000	Tempo_30m	NENHUM	24.5	65.2	55.0	0
-1714141200	Sensor_Solo	BOMBA_LIGOU	25.1	64.0	49.5	0
-1714141210	Timer_Pulso	BOMBA_DESLIGOU	25.1	64.1	49.5	1
-1714142500	Emergencia_Ar	VENT_LIGOU	32.4	82.0	60.1	0
-5. Implementação da Lógica de Tempo (Pseudo-Código C++)
+    Espressif IoT Development Framework (ESP-IDF) v5.x+.
 
-Para implementar a regra do ventilador sem usar a função delay() (que travaria o processador e arruinaria o experimento), a técnica de rastreamento de milissegundos é obrigatória.
-C++
+    Ferramenta CMake e Ninja.
 
-unsigned long janela_inicio = millis();
-unsigned long tempo_acumulado_vent = 0;
-unsigned long tempo_ligado_inicio = 0;
-const unsigned long JANELA_30M = 1800000;
-const unsigned long META_5M = 300000;
+Build & Flash
+Bash
 
-void gerenciarVentilacao() {
-  unsigned long agora = millis();
-  bool condicao_emergencia = (temp_ar > 32.0 && umid_ar > 80.0);
-  
-  // Reseta a janela a cada 30 minutos
-  if (agora - janela_inicio >= JANELA_30M) {
-    janela_inicio = agora;
-    tempo_acumulado_vent = 0; 
-  }
+# Configurar o target
+idf.py set-target esp32
 
-  // Verifica déficit de ventilação no fim da janela
-  bool deficit_ventilacao = ((agora - janela_inicio) > (JANELA_30M - META_5M)) && 
-                            (tempo_acumulado_vent < META_5M);
+# Abrir menu de configuração (Flash 4MB, PSRAM se disponível)
+idf.py menuconfig
 
-  if (condicao_emergencia || (deficit_ventilacao && horarioComercial())) {
-    if (!ventilador_ligado) {
-      ligarVentilador(); // Esta função dispara o LOG do evento
-      tempo_ligado_inicio = agora;
-    }
-  } else {
-    if (ventilador_ligado && !condicao_emergencia) {
-      desligarVentilador(); // Dispara o LOG do evento
-      tempo_acumulado_vent += (agora - tempo_ligado_inicio);
-    }
-  }
-}
+# Compilar e Gravar
+idf.py build flash monitor
+
+📊 Estrutura de Logs
+
+O sistema cospe dados no formato .csv via Serial para fácil importação em R ou Python:
+[TIMESTAMP], [EVENTO], [TEMP_AR], [UMID_AR], [VPD], [UMID_SOLO], [POWER_STATUS]
+
+⚠️ Notas de Integridade Estrutural (Aviso do Mentor)
+
+    Rigor Técnico: Este código foi desenhado para ambiente de laboratório. Toda atuação de carga indutiva (motores) deve utilizar diodos de flyback.
+
+🤝 Contribuição e Créditos
+
+Este é um projeto do NEPEM/UFSC. Se você encontrar falhas na lógica de histerese ou nos cálculos termodinâmicos, abra uma Issue com o embasamento agronômico correspondente.
+
+Desenvolvedor: Matheus Lopes Machado
