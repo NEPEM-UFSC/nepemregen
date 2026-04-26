@@ -1,14 +1,14 @@
 #include "edge_analytics.hpp"
 #include "esp_log.h"
 #include "esp_system.h"
-#include "nvs_flash.h"
-#include "nvs.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "hal_adc.h"
 #include "hal_gpio.h"
 #include "hal_i2c.h"
 #include "irrigation_ctrl.h"
+#include "nvs.h"
+#include "nvs_flash.h"
 #include "telemetry.h"
 #include "time_utils.h"
 #include "ventilation_ctrl.h"
@@ -33,6 +33,7 @@ const float GDD_T_BASE = 10.0f;
 void task_sensors(void *pvParameters) {
   uint32_t last_day = TimeUtils::get_epoch() / 86400;
   bool last_power_state = HalGpio::is_ac_power_present();
+  uint32_t power_lost_millis = 0;
 
   while (1) {
     float raw_solo = HalAdc::read_soil_moisture();
@@ -59,24 +60,32 @@ void task_sensors(void *pvParameters) {
     bool current_power_state = HalGpio::is_ac_power_present();
     if (current_power_state != last_power_state) {
       if (current_power_state == false) {
+        power_lost_millis = esp_log_timestamp();
         ESP_LOGE(TAG,
                  "ALERTA: Queda de energia da rede. Operando via Bateria/UPS.");
         Telemetry::log_event("Hardware", "FALHA_ENERGIA", temp_ar, umid_ar,
                              umid_solo, false);
-                             
+        power_lost_millis = TimeUtils::millis();
+
         // Atualiza NVS com o contador de quedas
         nvs_handle_t my_handle;
         if (nvs_open("regen_stats", NVS_READWRITE, &my_handle) == ESP_OK) {
-            int32_t quedas = 0;
-            nvs_get_i32(my_handle, "counter_quedas", &quedas);
-            quedas++;
-            nvs_set_i32(my_handle, "counter_quedas", quedas);
-            nvs_commit(my_handle);
-            nvs_close(my_handle);
-            ESP_LOGI(TAG, "Queda registrada no NVS. Total historico: %ld", (long)quedas);
+          int32_t quedas = 0;
+          nvs_get_i32(my_handle, "counter_quedas", &quedas);
+          quedas++;
+          nvs_set_i32(my_handle, "counter_quedas", quedas);
+          nvs_commit(my_handle);
+          nvs_close(my_handle);
+          ESP_LOGI(TAG, "Queda registrada no NVS. Total historico: %ld",
+                   (long)quedas);
         }
       } else {
-        ESP_LOGI(TAG, "Energia da rede restaurada.");
+        uint32_t duration_sec =
+            (TimeUtils::millis() - power_lost_millis) / 1000;
+        ESP_LOGI(
+            TAG,
+            "Energia da rede restaurada. Autonomia utilizada: %lu segundos.",
+            (unsigned long)duration_sec);
         Telemetry::log_event("Hardware", "ENERGIA_RESTAURADA", temp_ar, umid_ar,
                              umid_solo, false);
       }
@@ -127,7 +136,8 @@ void task_telemetry_timer(void *pvParameters) {
 extern "C" void app_main() {
   // Inicializa NVS (necessario para armazenar contadores)
   esp_err_t err = nvs_flash_init();
-  if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+  if (err == ESP_ERR_NVS_NO_FREE_PAGES ||
+      err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
     ESP_ERROR_CHECK(nvs_flash_erase());
     err = nvs_flash_init();
   }
@@ -138,7 +148,8 @@ extern "C" void app_main() {
   // Checa causa do reset para detectar Brownout (Surto/Instabilidade)
   esp_reset_reason_t reason = esp_reset_reason();
   if (reason == ESP_RST_BROWNOUT) {
-    ESP_LOGE(TAG, "CRITICAL: System rebooted due to BROWNOUT (Power Surge/Dip).");
+    ESP_LOGE(TAG,
+             "CRITICAL: System rebooted due to BROWNOUT (Power Surge/Dip).");
     // Sera logado via telemetria quando a task de controle iniciar
   } else {
     ESP_LOGI(TAG, "Reset reason: %d", reason);
@@ -147,10 +158,11 @@ extern "C" void app_main() {
   // Leitura do NVS para reportar histórico de quedas no boot
   nvs_handle_t my_handle;
   if (nvs_open("regen_stats", NVS_READONLY, &my_handle) == ESP_OK) {
-      int32_t quedas = 0;
-      nvs_get_i32(my_handle, "counter_quedas", &quedas);
-      nvs_close(my_handle);
-      ESP_LOGI(TAG, "Total de quedas de energia registradas no NVS: %ld", (long)quedas);
+    int32_t quedas = 0;
+    nvs_get_i32(my_handle, "counter_quedas", &quedas);
+    nvs_close(my_handle);
+    ESP_LOGI(TAG, "Total de quedas de energia registradas no NVS: %ld",
+             (long)quedas);
   }
 
   TimeUtils::init();
