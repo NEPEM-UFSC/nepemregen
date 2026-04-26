@@ -1,87 +1,89 @@
 # NEPEM REGEN
 
-## Sistema de Controle Ambiental de Precisão para Mini-estufas.
-## Desenvolvido pelo o Núcleo de Estudos e Pesquisa em Experimentação e Melhoramento Vegetal (NEPEM/UFSC)
+    Sistema de Controle Estocástico para Experimentação em Melhoramento de Linhaça (Linum usitatissimum)
 
-O REGEN é um sistema embarcado de malha fechada projetado para a automação e monitoramento de estufas de pesquisa (_Nursery_), especificamente calibrado para o cultivo de Linhaça (_Linum usitatissimum_). O foco do projeto é a manutenção do Déficit de Pressão de Vapor (VPD) e a estabilidade da tensão matricial do solo, garantindo a repetibilidade experimental necessária para programas de melhoramento.
+📌 Visão Geral
 
-## O Problema Científico
+O REGEN é um núcleo de controle em tempo real para mini-estufas de pesquisa. Diferente de controladores comerciais, o REGEN utiliza Edge Analytics para calcular variáveis fisiológicas invisíveis, como o VPD (Déficit de Pressão de Vapor), garantindo que a linhaça opere sempre em sua zona de máxima eficiência fotossintética sem risco de saturação fúngica.
+🧬 Lógica de Controle Avançada
+1. Dinâmica Hídrica (Anti-Overshooting)
 
-Experimentos com linhaça em ambiente controlado sofrem com a alta sensibilidade à umidade relativa e ao estresse hídrico. A ventilação inadequada gera condensação foliar (risco de Botrytis), enquanto a irrigação baseada apenas em timers ignora a inércia hídrica do substrato, levando ao overshooting hídrico. O REGEN resolve isso através de Edge Analytics e Interlocks de Segurança.
+O sistema implementa uma Máquina de Estados Não-Bloqueante para gerenciar a inércia do substrato.
 
-## Arquitetura do Sistema
-Hardware (Bill of Materials)
+    Threshold: Usolo​<50%.
 
-    MCU: ESP32-WROOM-32 (Target esp32).
+    Pulso: Injeção de Q volume (mL) por t segundos.
 
-    Sensor Termodinâmico: SHT31-D (I2C) com filtro sinterizado.
+    Lockdown Period: Bloqueio de re-irrigação baseado no Lag-Time de infiltração.
 
-    Sensores Hídricos: 2x Sensores Capacitivos de Umidade do Solo (Resistentes à corrosão).
+2. Algoritmo Termodinâmico (VPD Analytics)
 
-    Gestão de Energia: Módulo UPS 18650 com Gerenciamento de Caminho de Energia.
+Cálculo local no ESP32 utilizando a equação de Tetens para pressão de saturação:
+es​=0.6108⋅exp(T+237.317.27⋅T​)
+VPD=es​⋅(1−100UR​)
+🛠️ Especificações de Hardware (BOM)
+Componente	Especificação Técnica	Função
+MCU	ESP32-WROOM-32 (Xtensa LX6)	Core de processamento
+Ambiente	SHT31-D (I2C)	Temp/UR de alta precisão
+Solo	Sonda Capacitiva V2.0 (Corrosion Resistant)	Umidade Volumétrica (VWC)
+Energia	UPS 18650 Power Path	Backup de 5V ininterrupto
+Atuadores	Relés Optoacoplados 5V	Isolação Galvânica de Motores
+📂 Estrutura do Projeto (ESP-IDF Standard)
+Plaintext
 
-    Atuação: Shield de Relés de 2 Canais com isolamento por optoacopladores.
+nepem-regen/
+├── CMakeLists.txt
+├── main/
+│   ├── main.cpp            <-- Entry point (app_main)
+│   ├── CMakeLists.txt
+│   ├── idf_component.yml   <-- Dependências (SHT3x, MQTT)
+│   ├── sensors.hpp         <-- Abstração de I2C e ADC
+│   └── control_logic.cpp   <-- Algoritmos de Irrigação/VPD
+├── components/             <-- Drivers customizados
+├── partitions.csv          <-- Mapa de memória (NVS, LittleFS)
+└── sdkconfig               <-- Configurações de RTOS e WiFi
 
-    I/O Peripheral: Shield de expansão de IO para facilitar conexões e reduzir ruído.
+🔌 Pinout & Conectividade (Mapeamento Crítico)
+Pino ESP32	Função	Direção	Protocolo
+GPIO 21	SDA (SHT31-D)	I/O	I2C
+GPIO 22	SCL (SHT31-D)	O	I2C
+GPIO 34	Sensor Solo 01	I	ADC (Analog)
+GPIO 32	Detecção AC (UPS)	I	Digital
+GPIO 26	Bomba Irrigação	O	Digital (Relé)
+GPIO 27	Ventilador	O	Digital (Relé)
+📊 Protocolo de Telemetria (CSV Layout)
 
-Software Stack
+Os dados são transmitidos via UART em 115200 bauds para captura por script Python host:
 
-    Firmware: C++ Nativo sobre ESP-IDF (FreeRTOS).
+TIMESTAMP;EVENT_TYPE;T_AIR;RH_AIR;VPD;SOIL_MOIST;POWER_SRC
 
-    Analytics: Cálculo local de VPD e Ponto de Orvalho.
+    Exemplo: 1714135200;LOG_PERIODIC;24.5;65.0;1.05;55.2;AC_POWER
 
-    Logging: CSV estruturado via UART/Serial (integrável com Python Host).
+🚀 Deployment Científico
 
-    Resiliência: Detecção de Brownout e persistência em memória NVS.
+    Configuração de Ambiente:
+    Bash
 
-🧬 Lógica de Controle (The "Regen" Core)
-1. Irrigação com Calibração de Lag-Time
+    . $HOME/esp/esp-idf/export.sh
+    idf.py set-target esp32
 
-O sistema utiliza um algoritmo de Pulso & Espera. Ao detectar solo abaixo de 50%, dispara um volume fixo (calibrado em mL) e entra em estado de Lockdown por X minutos, permitindo que o sensor detecte a água percolada antes de nova atuação.
-2. Ventilação Estratégica (VPD-Driven)
+    Configuração do Eduroam (WPA2-Enterprise):
+    Acesse idf.py menuconfig -> Component config -> Wi-Fi e insira suas credenciais do IdUFSC.
 
-A ventilação não é apenas horária; ela é inteligente:
+    Flash:
+    Bash
 
-    Quota de Renovação: Garante 5 min de fluxo a cada 30 min (janela das 06h às 18h).
+    idf.py build flash monitor
 
-    Gatilho de VPD: Aciona emergencialmente se o VPD cair abaixo de 0.4 kPa (evitando fungos) ou se o Ponto de Orvalho se aproximar da temperatura foliar.
+⚠️ Integridade Estrutural & Segurança
 
-3. Telemetria de Falhas
+    Fail-Safe: Em caso de falha crítica no sensor SHT31, o sistema força a ventilação a 50% de duty cycle por segurança biológica.
 
-    Monitoramento ativo da rede elétrica da UFSC via divisor de tensão.
+    Proteção de Atuadores: Uso obrigatório de diodos de flyback (ex: 1N4007) em paralelo com as bobinas dos relés para evitar EMI e danos ao SoC.
 
-    Registro de BROWNOUT_RESET para invalidar dados climáticos durante instabilidades elétricas.
+🤝 Créditos & Institucional
 
-🚀 Como Executar (Ambiente de Pesquisa)
-Requisitos
+NEPEM - Núcleo de Estudos e Pesquisa em Experimentação e Melhoramento Vegetal
+CCA - Centro de Ciências Agrárias | UFSC
 
-    Espressif IoT Development Framework (ESP-IDF) v5.x+.
-
-    Ferramenta CMake e Ninja.
-
-Build & Flash
-Bash
-
-# Configurar o target
-idf.py set-target esp32
-
-# Abrir menu de configuração (Flash 4MB, PSRAM se disponível)
-idf.py menuconfig
-
-# Compilar e Gravar
-idf.py build flash monitor
-
-📊 Estrutura de Logs
-
-O sistema cospe dados no formato .csv via Serial para fácil importação em R ou Python:
-[TIMESTAMP], [EVENTO], [TEMP_AR], [UMID_AR], [VPD], [UMID_SOLO], [POWER_STATUS]
-
-⚠️ Notas de Integridade Estrutural (Aviso do Mentor)
-
-    Rigor Técnico: Este código foi desenhado para ambiente de laboratório. Toda atuação de carga indutiva (motores) deve utilizar diodos de flyback.
-
-🤝 Contribuição e Créditos
-
-Este é um projeto do NEPEM/UFSC. Se você encontrar falhas na lógica de histerese ou nos cálculos termodinâmicos, abra uma Issue com o embasamento agronômico correspondente.
-
-Desenvolvedor: Matheus Lopes Machado
+Líder de Desenvolvimento: Matheus Lopes Machado
